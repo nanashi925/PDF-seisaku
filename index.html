@@ -748,8 +748,8 @@ body {
         </div>
         <div class="preprocess-row">
           <label>コントラスト</label>
-          <input type="range" id="preprocessContrast" min="1" max="3" step="0.1" value="1.8">
-          <span class="range-val" id="contrastVal">1.8</span>
+          <input type="range" id="preprocessContrast" min="1" max="3" step="0.1" value="1.5">
+          <span class="range-val" id="contrastVal">1.5</span>
         </div>
         <div class="preprocess-row">
           <label>二値化閾値</label>
@@ -1107,12 +1107,11 @@ body {
 
     const presets = {
       light:  { upscale: 1.5, contrast: 1.3, sharpen: 0.3, denoise: false, binarize: false, threshold: 128 },
-      auto:   { upscale: 2.0, contrast: contrast, sharpen: 0.6, denoise: true,  binarize: true,  threshold: threshold },
-      heavy:  { upscale: 3.0, contrast: 2.5, sharpen: 0.8, denoise: true,  binarize: true,  threshold: threshold },
+      auto:   { upscale: 2.0, contrast: contrast, sharpen: 0.5, denoise: true,  binarize: true,  threshold: threshold },
+      heavy:  { upscale: 2.5, contrast: contrast, sharpen: 0.7, denoise: true,  binarize: true,  threshold: threshold },
     };
 
     const params = presets[level] || presets.auto;
-    // For auto/heavy, use the slider values
     if (level === 'auto' || level === 'heavy') {
       params.contrast = contrast;
       params.threshold = threshold;
@@ -1123,7 +1122,6 @@ body {
   // Main preprocessing function — returns a canvas
   function preprocessImage(img, params) {
     if (!params) {
-      // No preprocessing, just return canvas of original
       const c = document.createElement('canvas');
       c.width = img.naturalWidth || img.width;
       c.height = img.naturalHeight || img.height;
@@ -1144,7 +1142,6 @@ body {
     canvas.height = h;
     const ctx = canvas.getContext('2d');
 
-    // Use high-quality interpolation
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, w, h);
@@ -1158,13 +1155,12 @@ body {
       data[i] = data[i+1] = data[i+2] = gray;
     }
 
-    // Step 3: Contrast enhancement
+    // Step 3: Contrast enhancement — simple linear stretch from midpoint
+    // contrast=1.0 means no change, >1 means more contrast (safe, never inverts)
     const contrast = params.contrast;
-    const factor = (259 * (contrast * 128 + 255)) / (255 * (259 - contrast * 128));
     for (let i = 0; i < data.length; i += 4) {
-      data[i]   = clamp(factor * (data[i] - 128) + 128);
-      data[i+1] = clamp(factor * (data[i+1] - 128) + 128);
-      data[i+2] = clamp(factor * (data[i+2] - 128) + 128);
+      const v = clamp(128 + (data[i] - 128) * contrast);
+      data[i] = data[i+1] = data[i+2] = v;
     }
 
     // Step 4: Denoise (3x3 median filter)
@@ -1193,7 +1189,6 @@ body {
       for (let y = 1; y < h - 1; y++) {
         for (let x = 1; x < w - 1; x++) {
           const idx = (y * w + x) * 4;
-          // 3x3 gaussian blur approximation
           const blur = (
             copy[((y-1)*w+(x-1))*4] + copy[((y-1)*w+x)*4]*2 + copy[((y-1)*w+(x+1))*4] +
             copy[(y*w+(x-1))*4]*2   + copy[(y*w+x)*4]*4     + copy[(y*w+(x+1))*4]*2 +
@@ -1205,7 +1200,7 @@ body {
       }
     }
 
-    // Step 6: Adaptive binarization (Otsu's method + local threshold)
+    // Step 6: Binarization (Otsu's method)
     if (params.binarize) {
       // Compute Otsu's threshold
       const histogram = new Array(256).fill(0);
@@ -1234,12 +1229,22 @@ body {
         }
       }
 
-      // Blend Otsu with user threshold: weighted average
+      // Blend Otsu with user threshold
       const finalThreshold = Math.round(otsuThreshold * 0.6 + params.threshold * 0.4);
 
+      let blackCount = 0;
       for (let i = 0; i < data.length; i += 4) {
         const v = data[i] < finalThreshold ? 0 : 255;
         data[i] = data[i+1] = data[i+2] = v;
+        if (v === 0) blackCount++;
+      }
+
+      // Safety: if majority is black, image is inverted — flip it
+      // (Tesseract expects black text on white background)
+      if (blackCount > totalPixels * 0.5) {
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = data[i+1] = data[i+2] = 255 - data[i];
+        }
       }
     }
 
@@ -1271,10 +1276,10 @@ body {
       preprocessContrast.value = 1.3; contrastVal.textContent = '1.3';
       preprocessThreshold.value = 128; thresholdVal.textContent = '128';
     } else if (level === 'auto') {
-      preprocessContrast.value = 1.8; contrastVal.textContent = '1.8';
+      preprocessContrast.value = 1.5; contrastVal.textContent = '1.5';
       preprocessThreshold.value = 128; thresholdVal.textContent = '128';
     } else if (level === 'heavy') {
-      preprocessContrast.value = 2.5; contrastVal.textContent = '2.5';
+      preprocessContrast.value = 2.0; contrastVal.textContent = '2.0';
       preprocessThreshold.value = 140; thresholdVal.textContent = '140';
     }
   });
