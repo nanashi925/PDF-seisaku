@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>椿 PDF 制作 — Camellia Document Studio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+/* ===== CSS Variables ===== */
+:root {
+  --camellia-red: #c62828;
+  --camellia-pink: #e57373;
+  --camellia-deep: #8e0000;
+  --camellia-light: #fce4ec;
+  --leaf-green: #2e7d32;
+  --leaf-dark: #1b5e20;
+  --stamen-gold: #f9a825;
+  --bg-cream: #fdfbf7;
+  --text-main: #2c2c2c;
+  --text-sub: #666;
+  --border-soft: #e0d6cc;
+  --shadow: 0 2px 16px rgba(0,0,0,0.08);
+}
+
+/* ===== Reset & Base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif;
+  background: var(--bg-cream);
+  color: var(--text-main);
+  line-height: 1.7;
+  min-height: 100vh;
+}
+
+/* ===== App Header ===== */
+.app-header {
+  background: linear-gradient(135deg, #fff 0%, var(--camellia-light) 100%);
+  border-bottom: 3px solid var(--camellia-red);
+  padding: 20px 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(198,40,40,0.08);
+}
+
+.app-header svg { flex-shrink: 0; }
+
+.app-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--camellia-deep);
+  letter-spacing: 0.04em;
+}
+
+.app-header p {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-top: 2px;
+}
+
+.security-badge {
+  margin-left: auto;
+  background: #e8f5e9;
+  color: var(--leaf-green);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #a5d6a7;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* ===== Layout ===== */
+.app-body {
+  display: flex;
+  gap: 0;
+  height: calc(100vh - 80px);
+}
+
+/* ===== Left Panel: Input ===== */
+.input-panel {
+  width: 420px;
+  min-width: 380px;
+  background: #fff;
+  border-right: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-tabs {
+  display: flex;
+  border-bottom: 2px solid #f0ebe5;
+  background: #faf7f2;
+}
+
+.panel-tab {
+  flex: 1;
+  padding: 12px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  transition: all 0.2s;
+  position: relative;
+}
+
+.panel-tab:hover { color: var(--camellia-red); }
+
+.panel-tab.active {
+  color: var(--camellia-red);
+}
+
+.panel-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  background: var(--camellia-red);
+  border-radius: 1px;
+}
+
+.tab-content { display: none; flex: 1; overflow-y: auto; padding: 20px; }
+.tab-content.active { display: flex; flex-direction: column; gap: 16px; }
+
+/* ===== Input Fields ===== */
+.field-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+}
+
+.field-group input,
+.field-group textarea,
+.field-group select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-main);
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.field-group input:focus,
+.field-group textarea:focus,
+.field-group select:focus {
+  outline: none;
+  border-color: var(--camellia-pink);
+  box-shadow: 0 0 0 3px rgba(198,40,40,0.08);
+}
+
+.field-group textarea {
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.8;
+}
+
+/* ===== OCR Section ===== */
+.ocr-drop-zone {
+  border: 2px dashed var(--border-soft);
+  border-radius: 12px;
+  padding: 32px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: #fdfbf7;
+}
+
+.ocr-drop-zone:hover,
+.ocr-drop-zone.drag-over {
+  border-color: var(--camellia-red);
+  background: var(--camellia-light);
+}
+
+.ocr-drop-zone svg { margin-bottom: 8px; }
+
+.ocr-drop-zone p {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin-top: 4px;
+}
+
+.ocr-drop-zone .sub {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 8px;
+}
+
+.ocr-progress {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: #faf7f2;
+  border-radius: 10px;
+}
+
+.ocr-progress.active { display: flex; }
+
+.progress-bar-track {
+  height: 6px;
+  background: #ece6dd;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--camellia-red), var(--camellia-pink));
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.3s;
+}
+
+.ocr-status {
+  font-size: 12px;
+  color: var(--text-sub);
+  text-align: center;
+}
+
+.ocr-image-preview {
+  display: none;
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: 8px;
+  object-fit: contain;
+  margin: 0 auto;
+  border: 1px solid var(--border-soft);
+}
+
+.ocr-image-preview.active { display: block; }
+
+/* ===== Action Buttons ===== */
+.actions-bar {
+  padding: 16px 20px;
+  border-top: 1px solid #f0ebe5;
+  background: #faf7f2;
+  display: flex;
+  gap: 10px;
+}
+
+.btn {
+  flex: 1;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--camellia-red), var(--camellia-deep));
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(198,40,40,0.25);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 4px 18px rgba(198,40,40,0.35);
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  background: #fff;
+  color: var(--text-main);
+  border: 1.5px solid var(--border-soft);
+}
+
+.btn-secondary:hover {
+  border-color: var(--camellia-pink);
+  color: var(--camellia-red);
+}
+
+/* ===== Right Panel: Preview ===== */
+.preview-panel {
+  flex: 1;
+  background: #f0ebe5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  padding: 32px;
+}
+
+/* ===== A4 PDF Page ===== */
+.pdf-page-wrapper {
+  width: 595px;  /* A4 at 72dpi */
+  min-height: 842px;
+  background: #fff;
+  box-shadow: var(--shadow), 0 8px 40px rgba(0,0,0,0.06);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* ===== Camellia Border Decorations ===== */
+.camellia-corner {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.camellia-corner.top-left { top: 8px; left: 8px; }
+.camellia-corner.top-right { top: 8px; right: 8px; transform: scaleX(-1); }
+.camellia-corner.bottom-left { bottom: 8px; left: 8px; transform: scaleY(-1); }
+.camellia-corner.bottom-right { bottom: 8px; right: 8px; transform: scale(-1, -1); }
+
+.pdf-border-frame {
+  position: absolute;
+  top: 40px;
+  left: 40px;
+  right: 40px;
+  bottom: 40px;
+  border: 1.5px solid #e8d5d5;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.pdf-border-inner {
+  position: absolute;
+  top: 44px;
+  left: 44px;
+  right: 44px;
+  bottom: 44px;
+  border: 0.5px solid #f0e0e0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ===== Side Floral Accents ===== */
+.side-accent {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.side-accent.left-mid {
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+}
+
+.side-accent.right-mid {
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%) scaleX(-1);
+}
+
+/* ===== PDF Content Area ===== */
+.pdf-content {
+  position: relative;
+  z-index: 3;
+  padding: 72px 64px 64px;
+  min-height: 842px;
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-title-area {
+  text-align: center;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #f0e0e0;
+}
+
+.pdf-doc-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--camellia-deep);
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.pdf-doc-subtitle {
+  font-size: 11px;
+  color: #b0a0a0;
+  letter-spacing: 0.06em;
+}
+
+.pdf-meta-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 24px;
+  font-size: 12px;
+}
+
+.pdf-meta-table th {
+  text-align: left;
+  background: #fdf0f0;
+  padding: 8px 14px;
+  font-weight: 600;
+  color: var(--camellia-deep);
+  border: 0.5px solid #e8d5d5;
+  width: 120px;
+  white-space: nowrap;
+}
+
+.pdf-meta-table td {
+  padding: 8px 14px;
+  border: 0.5px solid #e8d5d5;
+  color: var(--text-main);
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+.pdf-body-section h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--camellia-deep);
+  margin-bottom: 10px;
+  padding-left: 12px;
+  border-left: 3px solid var(--camellia-red);
+}
+
+.pdf-body-text {
+  font-size: 12px;
+  line-height: 2;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+.pdf-confidential-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-30deg);
+  font-size: 64px;
+  font-weight: 900;
+  color: rgba(198, 40, 40, 0.04);
+  letter-spacing: 0.15em;
+  pointer-events: none;
+  z-index: 0;
+  white-space: nowrap;
+}
+
+.pdf-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 0.5px solid #f0e0e0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #c0b0b0;
+}
+
+/* ===== Empty State ===== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #c0b0b0;
+  text-align: center;
+  gap: 12px;
+  padding: 40px;
+}
+
+.empty-state p { font-size: 14px; }
+.empty-state .sub { font-size: 11px; }
+
+/* ===== Lang selector in OCR tab ===== */
+.ocr-lang-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.ocr-lang-row label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+
+.ocr-lang-row select {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d5ccc2; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #bbb2a6; }
+
+/* ===== Responsive ===== */
+@media (max-width: 900px) {
+  .app-body { flex-direction: column; height: auto; }
+  .input-panel { width: 100%; min-width: 0; }
+  .preview-panel { padding: 16px; min-height: 60vh; }
+  .pdf-page-wrapper { width: 100%; min-height: auto; }
+  .pdf-content { padding: 48px 32px 40px; }
+  .security-badge span.badge-text { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<header class="app-header">
+  <svg width="36" height="36" viewBox="0 0 36 36">
+    <circle cx="18" cy="15" r="10" fill="#c62828" opacity="0.9"/>
+    <ellipse cx="13" cy="13" rx="5" ry="8" fill="#e57373" transform="rotate(-30 13 13)"/>
+    <ellipse cx="23" cy="13" rx="5" ry="8" fill="#e57373" transform="rotate(30 23 13)"/>
+    <ellipse cx="18" cy="9" rx="5" ry="7" fill="#ef9a9a"/>
+    <circle cx="18" cy="14" r="3" fill="#f9a825"/>
+    <circle cx="17" cy="13" r="0.6" fill="#fff"/>
+    <circle cx="19" cy="13" r="0.6" fill="#fff"/>
+    <circle cx="18" cy="15" r="0.6" fill="#fff"/>
+    <ellipse cx="12" cy="26" rx="6" ry="4" fill="#2e7d32" transform="rotate(-20 12 26)"/>
+    <ellipse cx="24" cy="26" rx="6" ry="4" fill="#2e7d32" transform="rotate(20 24 26)"/>
+  </svg>
+  <div>
+    <h1>椿 PDF 制作</h1>
+    <p>Camellia Document Studio</p>
+  </div>
+  <div class="security-badge">
+    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#2e7d32" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    <span class="badge-text">オフライン処理・データ外部送信なし</span>
+  </div>
+</header>
+
+<!-- ===== BODY ===== -->
+<div class="app-body">
+
+  <!-- ===== LEFT: Input Panel ===== -->
+  <div class="input-panel">
+    <div class="panel-tabs">
+      <button class="panel-tab active" data-tab="manual">テキスト入力</button>
+      <button class="panel-tab" data-tab="ocr">画像から文字起こし</button>
+      <button class="panel-tab" data-tab="settings">設定</button>
+    </div>
+
+    <!-- Tab: Manual Input -->
+    <div class="tab-content active" id="tab-manual">
+      <div class="field-group">
+        <label>文書タイトル</label>
+        <input type="text" id="docTitle" placeholder="例：プロジェクト企画書" maxlength="60">
+      </div>
+      <div class="field-group">
+        <label>作成日</label>
+        <input type="date" id="docDate">
+      </div>
+      <div class="field-group">
+        <label>作成者 / 部署</label>
+        <input type="text" id="docAuthor" placeholder="例：企画部 山田太郎" maxlength="40">
+      </div>
+      <div class="field-group">
+        <label>機密区分</label>
+        <select id="docClassification">
+          <option value="">なし</option>
+          <option value="社外秘">社外秘</option>
+          <option value="関係者限り">関係者限り</option>
+          <option value="極秘">極秘</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>本文</label>
+        <textarea id="docBody" rows="12" placeholder="ここに本文を入力してください...&#10;&#10;画像から文字起こしした内容もここに反映されます。"></textarea>
+      </div>
+    </div>
+
+    <!-- Tab: OCR -->
+    <div class="tab-content" id="tab-ocr">
+      <div class="ocr-lang-row">
+        <label>認識言語</label>
+        <select id="ocrLang">
+          <option value="jpn" selected>日本語</option>
+          <option value="eng">English</option>
+          <option value="jpn+eng">日本語 + English</option>
+          <option value="chi_sim">简体中文</option>
+          <option value="kor">한국어</option>
+        </select>
+      </div>
+
+      <div class="ocr-drop-zone" id="ocrDropZone">
+        <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="#c0b0b0" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+        </svg>
+        <p>画像をドラッグ＆ドロップ<br>またはクリックして選択</p>
+        <p class="sub">PNG / JPG / BMP / WebP 対応<br>すべてブラウザ内で処理されます</p>
+        <input type="file" id="ocrFileInput" accept="image/*" style="display:none">
+      </div>
+
+      <img class="ocr-image-preview" id="ocrPreview" alt="プレビュー">
+
+      <div class="ocr-progress" id="ocrProgress">
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="ocrProgressBar"></div>
+        </div>
+        <div class="ocr-status" id="ocrStatus">準備中...</div>
+      </div>
+
+      <div class="field-group">
+        <label>認識結果（編集可能）</label>
+        <textarea id="ocrResult" rows="10" placeholder="画像を読み込むと、認識結果がここに表示されます..."></textarea>
+      </div>
+
+      <button class="btn btn-secondary" id="ocrApplyBtn" style="align-self:flex-end;">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="m5 12 5 5L20 7"/></svg>
+        本文に反映
+      </button>
+    </div>
+
+    <!-- Tab: Settings -->
+    <div class="tab-content" id="tab-settings">
+      <div class="field-group">
+        <label>フォントサイズ（本文）</label>
+        <select id="settingFontSize">
+          <option value="10">10px — 小</option>
+          <option value="12" selected>12px — 標準</option>
+          <option value="14">14px — 大</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>透かし表示</label>
+        <select id="settingWatermark">
+          <option value="on" selected>機密区分を透かし表示</option>
+          <option value="off">透かしなし</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>ファイル名</label>
+        <input type="text" id="settingFilename" placeholder="例：企画書_20260224">
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions-bar">
+      <button class="btn btn-secondary" id="previewBtn">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        プレビュー
+      </button>
+      <button class="btn btn-primary" id="downloadBtn">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        PDF ダウンロード
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== RIGHT: Preview ===== -->
+  <div class="preview-panel">
+    <div class="pdf-page-wrapper" id="pdfPage">
+
+      <!-- Camellia Corner Decorations -->
+      <svg class="camellia-corner top-left" width="80" height="80" viewBox="0 0 80 80">
+        <ellipse cx="22" cy="28" rx="10" ry="16" fill="#c62828" opacity="0.7" transform="rotate(-40 22 28)"/>
+        <ellipse cx="32" cy="22" rx="10" ry="16" fill="#e57373" opacity="0.7" transform="rotate(-10 32 22)"/>
+        <ellipse cx="28" cy="18" rx="8" ry="14" fill="#ef9a9a" opacity="0.7" transform="rotate(-25 28 18)"/>
+        <ellipse cx="18" cy="20" rx="7" ry="12" fill="#e57373" opacity="0.6" transform="rotate(-55 18 20)"/>
+        <ellipse cx="34" cy="32" rx="8" ry="13" fill="#c62828" opacity="0.6" transform="rotate(10 34 32)"/>
+        <circle cx="26" cy="24" r="5" fill="#f9a825" opacity="0.8"/>
+        <circle cx="25" cy="23" r="0.8" fill="#fff"/>
+        <circle cx="27" cy="22" r="0.8" fill="#fff"/>
+        <circle cx="28" cy="24" r="0.8" fill="#fff"/>
+        <circle cx="26" cy="26" r="0.8" fill="#fff"/>
+        <circle cx="24" cy="25" r="0.8" fill="#fff"/>
+        <ellipse cx="50" cy="55" rx="16" ry="8" fill="#2e7d32" opacity="0.5" transform="rotate(-30 50 55)"/>
+        <ellipse cx="55" cy="45" rx="14" ry="7" fill="#388e3c" opacity="0.4" transform="rotate(-50 55 45)"/>
+        <line x1="50" y1="55" x2="36" y2="40" stroke="#2e7d32" stroke-width="0.5" opacity="0.4"/>
+        <!-- Small buds -->
+        <circle cx="60" cy="60" r="3" fill="#c62828" opacity="0.3"/>
+        <circle cx="65" cy="52" r="2" fill="#e57373" opacity="0.3"/>
+      </svg>
+
+      <svg class="camellia-corner top-right" width="80" height="80" viewBox="0 0 80 80">
+        <ellipse cx="22" cy="28" rx="10" ry="16" fill="#c62828" opacity="0.7" transform="rotate(-40 22 28)"/>
+        <ellipse cx="32" cy="22" rx="10" ry="16" fill="#e57373" opacity="0.7" transform="rotate(-10 32 22)"/>
+        <ellipse cx="28" cy="18" rx="8" ry="14" fill="#ef9a9a" opacity="0.7" transform="rotate(-25 28 18)"/>
+        <ellipse cx="18" cy="20" rx="7" ry="12" fill="#e57373" opacity="0.6" transform="rotate(-55 18 20)"/>
+        <ellipse cx="34" cy="32" rx="8" ry="13" fill="#c62828" opacity="0.6" transform="rotate(10 34 32)"/>
+        <circle cx="26" cy="24" r="5" fill="#f9a825" opacity="0.8"/>
+        <circle cx="25" cy="23" r="0.8" fill="#fff"/>
+        <circle cx="27" cy="22" r="0.8" fill="#fff"/>
+        <circle cx="28" cy="24" r="0.8" fill="#fff"/>
+        <circle cx="26" cy="26" r="0.8" fill="#fff"/>
+        <circle cx="24" cy="25" r="0.8" fill="#fff"/>
+        <ellipse cx="50" cy="55" rx="16" ry="8" fill="#2e7d32" opacity="0.5" transform="rotate(-30 50 55)"/>
+        <ellipse cx="55" cy="45" rx="14" ry="7" fill="#388e3c" opacity="0.4" transform="rotate(-50 55 45)"/>
+        <circle cx="60" cy="60" r="3" fill="#c62828" opacity="0.3"/>
+        <circle cx="65" cy="52" r="2" fill="#e57373" opacity="0.3"/>
+      </svg>
+
+      <svg class="camellia-corner bottom-left" width="80" height="80" viewBox="0 0 80 80">
+        <ellipse cx="22" cy="28" rx="10" ry="16" fill="#c62828" opacity="0.7" transform="rotate(-40 22 28)"/>
+        <ellipse cx="32" cy="22" rx="10" ry="16" fill="#e57373" opacity="0.7" transform="rotate(-10 32 22)"/>
+        <ellipse cx="28" cy="18" rx="8" ry="14" fill="#ef9a9a" opacity="0.7" transform="rotate(-25 28 18)"/>
+        <ellipse cx="18" cy="20" rx="7" ry="12" fill="#e57373" opacity="0.6" transform="rotate(-55 18 20)"/>
+        <ellipse cx="34" cy="32" rx="8" ry="13" fill="#c62828" opacity="0.6" transform="rotate(10 34 32)"/>
+        <circle cx="26" cy="24" r="5" fill="#f9a825" opacity="0.8"/>
+        <circle cx="25" cy="23" r="0.8" fill="#fff"/>
+        <circle cx="27" cy="22" r="0.8" fill="#fff"/>
+        <circle cx="28" cy="24" r="0.8" fill="#fff"/>
+        <circle cx="26" cy="26" r="0.8" fill="#fff"/>
+        <circle cx="24" cy="25" r="0.8" fill="#fff"/>
+        <ellipse cx="50" cy="55" rx="16" ry="8" fill="#2e7d32" opacity="0.5" transform="rotate(-30 50 55)"/>
+        <ellipse cx="55" cy="45" rx="14" ry="7" fill="#388e3c" opacity="0.4" transform="rotate(-50 55 45)"/>
+        <circle cx="60" cy="60" r="3" fill="#c62828" opacity="0.3"/>
+      </svg>
+
+      <svg class="camellia-corner bottom-right" width="80" height="80" viewBox="0 0 80 80">
+        <ellipse cx="22" cy="28" rx="10" ry="16" fill="#c62828" opacity="0.7" transform="rotate(-40 22 28)"/>
+        <ellipse cx="32" cy="22" rx="10" ry="16" fill="#e57373" opacity="0.7" transform="rotate(-10 32 22)"/>
+        <ellipse cx="28" cy="18" rx="8" ry="14" fill="#ef9a9a" opacity="0.7" transform="rotate(-25 28 18)"/>
+        <ellipse cx="18" cy="20" rx="7" ry="12" fill="#e57373" opacity="0.6" transform="rotate(-55 18 20)"/>
+        <ellipse cx="34" cy="32" rx="8" ry="13" fill="#c62828" opacity="0.6" transform="rotate(10 34 32)"/>
+        <circle cx="26" cy="24" r="5" fill="#f9a825" opacity="0.8"/>
+        <circle cx="25" cy="23" r="0.8" fill="#fff"/>
+        <circle cx="27" cy="22" r="0.8" fill="#fff"/>
+        <circle cx="28" cy="24" r="0.8" fill="#fff"/>
+        <circle cx="26" cy="26" r="0.8" fill="#fff"/>
+        <circle cx="24" cy="25" r="0.8" fill="#fff"/>
+        <ellipse cx="50" cy="55" rx="16" ry="8" fill="#2e7d32" opacity="0.5" transform="rotate(-30 50 55)"/>
+        <ellipse cx="55" cy="45" rx="14" ry="7" fill="#388e3c" opacity="0.4" transform="rotate(-50 55 45)"/>
+        <circle cx="60" cy="60" r="3" fill="#c62828" opacity="0.3"/>
+      </svg>
+
+      <!-- Side accents -->
+      <svg class="side-accent left-mid" width="24" height="120" viewBox="0 0 24 120">
+        <ellipse cx="12" cy="30" rx="6" ry="10" fill="#c62828" opacity="0.3" transform="rotate(-15 12 30)"/>
+        <ellipse cx="10" cy="28" rx="4" ry="8" fill="#e57373" opacity="0.3" transform="rotate(-30 10 28)"/>
+        <circle cx="11" cy="30" r="2.5" fill="#f9a825" opacity="0.4"/>
+        <ellipse cx="14" cy="50" rx="8" ry="4" fill="#2e7d32" opacity="0.25" transform="rotate(-20 14 50)"/>
+        <ellipse cx="12" cy="90" rx="6" ry="10" fill="#c62828" opacity="0.25" transform="rotate(10 12 90)"/>
+        <ellipse cx="10" cy="88" rx="4" ry="7" fill="#e57373" opacity="0.25" transform="rotate(-5 10 88)"/>
+        <circle cx="11" cy="90" r="2" fill="#f9a825" opacity="0.35"/>
+        <ellipse cx="14" cy="72" rx="7" ry="3.5" fill="#2e7d32" opacity="0.2" transform="rotate(15 14 72)"/>
+      </svg>
+
+      <svg class="side-accent right-mid" width="24" height="120" viewBox="0 0 24 120">
+        <ellipse cx="12" cy="30" rx="6" ry="10" fill="#c62828" opacity="0.3" transform="rotate(-15 12 30)"/>
+        <ellipse cx="10" cy="28" rx="4" ry="8" fill="#e57373" opacity="0.3" transform="rotate(-30 10 28)"/>
+        <circle cx="11" cy="30" r="2.5" fill="#f9a825" opacity="0.4"/>
+        <ellipse cx="14" cy="50" rx="8" ry="4" fill="#2e7d32" opacity="0.25" transform="rotate(-20 14 50)"/>
+        <ellipse cx="12" cy="90" rx="6" ry="10" fill="#c62828" opacity="0.25" transform="rotate(10 12 90)"/>
+        <ellipse cx="10" cy="88" rx="4" ry="7" fill="#e57373" opacity="0.25" transform="rotate(-5 10 88)"/>
+        <circle cx="11" cy="90" r="2" fill="#f9a825" opacity="0.35"/>
+        <ellipse cx="14" cy="72" rx="7" ry="3.5" fill="#2e7d32" opacity="0.2" transform="rotate(15 14 72)"/>
+      </svg>
+
+      <!-- Border frames -->
+      <div class="pdf-border-frame"></div>
+      <div class="pdf-border-inner"></div>
+
+      <!-- Content -->
+      <div class="pdf-content" id="pdfContent">
+        <div class="pdf-confidential-stamp" id="pdfWatermark"></div>
+
+        <div class="pdf-title-area">
+          <div class="pdf-doc-title" id="pdfTitle">文書タイトル</div>
+          <div class="pdf-doc-subtitle" id="pdfSubtitle"></div>
+        </div>
+
+        <table class="pdf-meta-table" id="pdfMetaTable">
+          <tr><th>作成日</th><td id="pdfDate">—</td></tr>
+          <tr><th>作成者</th><td id="pdfAuthor">—</td></tr>
+          <tr><th>機密区分</th><td id="pdfClassification">—</td></tr>
+        </table>
+
+        <div class="pdf-body-section">
+          <h3>内容</h3>
+          <div class="pdf-body-text" id="pdfBody">
+            <div class="empty-state">
+              <svg width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="#d0c0c0" stroke-width="1.2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <p>左のパネルから入力すると<br>プレビューが表示されます</p>
+              <p class="sub">画像のOCR読み取りにも対応しています</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pdf-footer">
+          <span id="pdfFooterClass"></span>
+          <span>椿 PDF 制作</span>
+          <span>Page 1</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ===== DOM Elements =====
+  const $ = id => document.getElementById(id);
+  const docTitle = $('docTitle');
+  const docDate = $('docDate');
+  const docAuthor = $('docAuthor');
+  const docClassification = $('docClassification');
+  const docBody = $('docBody');
+  const pdfTitle = $('pdfTitle');
+  const pdfSubtitle = $('pdfSubtitle');
+  const pdfDate = $('pdfDate');
+  const pdfAuthor = $('pdfAuthor');
+  const pdfClassification = $('pdfClassification');
+  const pdfBody = $('pdfBody');
+  const pdfWatermark = $('pdfWatermark');
+  const pdfFooterClass = $('pdfFooterClass');
+  const pdfMetaTable = $('pdfMetaTable');
+
+  // Settings
+  const settingFontSize = $('settingFontSize');
+  const settingWatermark = $('settingWatermark');
+  const settingFilename = $('settingFilename');
+
+  // OCR elements
+  const ocrDropZone = $('ocrDropZone');
+  const ocrFileInput = $('ocrFileInput');
+  const ocrPreview = $('ocrPreview');
+  const ocrProgress = $('ocrProgress');
+  const ocrProgressBar = $('ocrProgressBar');
+  const ocrStatus = $('ocrStatus');
+  const ocrResult = $('ocrResult');
+  const ocrLang = $('ocrLang');
+  const ocrApplyBtn = $('ocrApplyBtn');
+
+  // Buttons
+  const previewBtn = $('previewBtn');
+  const downloadBtn = $('downloadBtn');
+
+  // ===== Set today's date =====
+  docDate.value = new Date().toISOString().split('T')[0];
+
+  // ===== Tab Switching =====
+  document.querySelectorAll('.panel-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ===== Live Preview =====
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function updatePreview() {
+    const title = docTitle.value.trim();
+    const date = docDate.value;
+    const author = docAuthor.value.trim();
+    const classification = docClassification.value;
+    const body = docBody.value.trim();
+    const fontSize = settingFontSize.value + 'px';
+    const showWatermark = settingWatermark.value === 'on';
+
+    pdfTitle.textContent = title || '文書タイトル';
+    pdfSubtitle.textContent = classification ? '【' + classification + '】' : '';
+    pdfDate.textContent = date || '—';
+    pdfAuthor.textContent = author || '—';
+    pdfClassification.textContent = classification || 'なし';
+
+    if (body) {
+      pdfBody.innerHTML = '';
+      pdfBody.style.fontSize = fontSize;
+      pdfBody.textContent = body;
+    } else {
+      pdfBody.innerHTML = '<div class="empty-state">' +
+        '<svg width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="#d0c0c0" stroke-width="1.2">' +
+        '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>' +
+        '</svg><p>左のパネルから入力すると<br>プレビューが表示されます</p>' +
+        '<p class="sub">画像のOCR読み取りにも対応しています</p></div>';
+    }
+
+    if (showWatermark && classification) {
+      pdfWatermark.textContent = classification;
+      pdfWatermark.style.display = 'block';
+    } else {
+      pdfWatermark.style.display = 'none';
+    }
+
+    pdfFooterClass.textContent = classification ? '【' + classification + '】' : '';
+  }
+
+  // Attach live preview listeners
+  [docTitle, docDate, docAuthor, docBody].forEach(el => {
+    el.addEventListener('input', updatePreview);
+  });
+  [docClassification, settingFontSize, settingWatermark].forEach(el => {
+    el.addEventListener('change', updatePreview);
+  });
+
+  previewBtn.addEventListener('click', updatePreview);
+
+  // ===== OCR =====
+  ocrDropZone.addEventListener('click', () => ocrFileInput.click());
+
+  ocrDropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    ocrDropZone.classList.add('drag-over');
+  });
+
+  ocrDropZone.addEventListener('dragleave', () => {
+    ocrDropZone.classList.remove('drag-over');
+  });
+
+  ocrDropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    ocrDropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) {
+      handleOcrFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  ocrFileInput.addEventListener('change', e => {
+    if (e.target.files.length > 0) {
+      handleOcrFile(e.target.files[0]);
+    }
+  });
+
+  function handleOcrFile(file) {
+    if (!file.type.startsWith('image/')) {
+      alert('画像ファイルを選択してください。');
+      return;
+    }
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = e => {
+      ocrPreview.src = e.target.result;
+      ocrPreview.classList.add('active');
+      runOcr(file);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function runOcr(file) {
+    const lang = ocrLang.value;
+
+    ocrProgress.classList.add('active');
+    ocrProgressBar.style.width = '0%';
+    ocrStatus.textContent = 'OCRエンジンを初期化中...';
+    ocrResult.value = '';
+
+    try {
+      const worker = await Tesseract.createWorker(lang, 1, {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            const pct = Math.round(m.progress * 100);
+            ocrProgressBar.style.width = pct + '%';
+            ocrStatus.textContent = '文字認識中... ' + pct + '%';
+          } else if (m.status === 'loading language traineddata') {
+            ocrProgressBar.style.width = '20%';
+            ocrStatus.textContent = '言語データを読み込み中...';
+          } else if (m.status === 'initializing api') {
+            ocrProgressBar.style.width = '40%';
+            ocrStatus.textContent = 'OCRエンジンを準備中...';
+          }
+        }
+      });
+
+      const { data: { text } } = await worker.recognize(file);
+      ocrResult.value = text.trim();
+      ocrProgressBar.style.width = '100%';
+      ocrStatus.textContent = '文字認識が完了しました';
+
+      await worker.terminate();
+    } catch (err) {
+      ocrStatus.textContent = 'エラー: ' + err.message;
+      ocrProgressBar.style.width = '0%';
+      console.error('OCR error:', err);
+    }
+  }
+
+  // Apply OCR result to body
+  ocrApplyBtn.addEventListener('click', () => {
+    const text = ocrResult.value.trim();
+    if (!text) {
+      alert('認識結果がありません。先に画像を読み込んでください。');
+      return;
+    }
+
+    if (docBody.value.trim()) {
+      docBody.value += '\n\n' + text;
+    } else {
+      docBody.value = text;
+    }
+
+    // Switch to manual tab and update preview
+    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-tab="manual"]').classList.add('active');
+    document.getElementById('tab-manual').classList.add('active');
+
+    updatePreview();
+  });
+
+  // ===== PDF Download =====
+  downloadBtn.addEventListener('click', async () => {
+    updatePreview();
+
+    const body = docBody.value.trim();
+    if (!body) {
+      alert('本文を入力してください。');
+      return;
+    }
+
+    downloadBtn.disabled = true;
+    downloadBtn.innerHTML = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12l10 10 10-10"/></svg> 生成中...';
+
+    try {
+      const filename = settingFilename.value.trim() ||
+        (docTitle.value.trim() || '椿PDF') + '_' + (docDate.value || 'document');
+
+      const pdfPage = document.getElementById('pdfPage');
+
+      const opt = {
+        margin:       0,
+        filename:     filename + '.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      await html2pdf().set(opt).from(pdfPage).save();
+
+    } catch (err) {
+      alert('PDF生成に失敗しました: ' + err.message);
+      console.error('PDF generation error:', err);
+    } finally {
+      downloadBtn.disabled = false;
+      downloadBtn.innerHTML = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> PDF ダウンロード';
+    }
+  });
+
+  // ===== Initial Preview =====
+  updatePreview();
+
+})();
+</script>
+</body>
+</html>
