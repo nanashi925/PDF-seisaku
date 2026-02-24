@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>椿 PDF 制作 — Camellia Document Studio</title>
+<title>PDF 制作</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
@@ -553,8 +553,8 @@ body {
     <ellipse cx="24" cy="26" rx="6" ry="4" fill="#2e7d32" transform="rotate(20 24 26)"/>
   </svg>
   <div>
-    <h1>椿 PDF 制作</h1>
-    <p>Camellia Document Studio</p>
+    <h1>PDF 制作</h1>
+    <p>Document Studio</p>
   </div>
   <div class="security-badge">
     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#2e7d32" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -814,7 +814,7 @@ body {
 
         <div class="pdf-footer">
           <span id="pdfFooterClass"></span>
-          <span>椿 PDF 制作</span>
+          <span>PDF 制作</span>
           <span>Page 1</span>
         </div>
       </div>
@@ -1048,7 +1048,7 @@ body {
 
     try {
       const filename = settingFilename.value.trim() ||
-        (docTitle.value.trim() || '椿PDF') + '_' + (docDate.value || 'document');
+        (docTitle.value.trim() || 'PDF文書') + '_' + (docDate.value || 'document');
 
       const pdfPage = document.getElementById('pdfPage');
 
