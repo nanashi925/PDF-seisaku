@@ -359,6 +359,87 @@ body {
   color: var(--camellia-red);
 }
 
+/* ===== Image Reference Panel (manual tab) ===== */
+.image-ref-panel {
+  display: none;
+  background: #faf7f2;
+  border: 1.5px solid var(--border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.image-ref-panel.active { display: block; }
+
+.image-ref-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f5efe8;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.image-ref-header span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--camellia-deep);
+}
+
+.image-ref-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-sub);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.image-ref-close:hover { color: var(--camellia-red); }
+
+.image-ref-body {
+  padding: 10px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.image-ref-body img {
+  width: 100%;
+  border-radius: 6px;
+  display: block;
+}
+
+/* ===== Low confidence hint ===== */
+.ocr-hint-box {
+  display: none;
+  background: #fff8e1;
+  border: 1.5px solid #ffe082;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: #8d6e00;
+  line-height: 1.7;
+}
+
+.ocr-hint-box.active { display: block; }
+
+.ocr-hint-box strong { color: #e65100; }
+
+.ocr-hint-box button {
+  margin-top: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #ff8f00, #e65100);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ocr-hint-box button:hover { opacity: 0.9; }
+
 /* ===== Action Buttons ===== */
 .actions-bar {
   padding: 16px 20px;
@@ -685,6 +766,17 @@ body {
 
     <!-- Tab: Manual Input -->
     <div class="tab-content active" id="tab-manual">
+      <!-- Image Reference (shown when user switches from OCR for manual input) -->
+      <div class="image-ref-panel" id="imageRefPanel">
+        <div class="image-ref-header">
+          <span>参照画像（見ながら入力）</span>
+          <button class="image-ref-close" id="imageRefClose">&times;</button>
+        </div>
+        <div class="image-ref-body">
+          <img id="imageRefImg" alt="参照画像">
+        </div>
+      </div>
+
       <div class="field-group">
         <label>文書タイトル</label>
         <input type="text" id="docTitle" placeholder="例：プロジェクト企画書" maxlength="60">
@@ -781,8 +873,17 @@ body {
         <div class="ocr-status" id="ocrStatus">準備中...</div>
       </div>
 
+      <!-- Low confidence hint -->
+      <div class="ocr-hint-box" id="ocrHintBox">
+        <strong>認識精度が低い結果です（手書き文字の可能性）</strong><br>
+        Tesseract.js は印刷文字向けのため、手書き文字は正確に認識できません。<br>
+        画像を見ながら手動入力するモードに切り替えできます。
+        <br>
+        <button id="switchToManualBtn">画像を見ながら手入力する</button>
+      </div>
+
       <div class="field-group">
-        <label>認識結果（編集可能） <span style="font-weight:400;color:#b0a0a0;">— 手書き文字は精度が低い場合があります。結果を手動で修正してください</span></label>
+        <label>認識結果（編集可能） <span style="font-weight:400;color:#b0a0a0;">— 手書き文字は精度が低い場合があります</span></label>
         <textarea id="ocrResult" rows="10" placeholder="画像を読み込むと、認識結果がここに表示されます...&#10;&#10;※ Tesseract.js は印刷文字向けのため、手書き文字の認識精度には限界があります。&#10;  結果は手動で修正してお使いください。"></textarea>
       </div>
 
@@ -1018,6 +1119,13 @@ body {
   const preprocessCompare = $('preprocessCompare');
   const preprocessPreviewBtn = $('preprocessPreviewBtn');
   const preprocessRerunBtn = $('preprocessRerunBtn');
+
+  // Image reference & hint elements
+  const imageRefPanel = $('imageRefPanel');
+  const imageRefImg = $('imageRefImg');
+  const imageRefClose = $('imageRefClose');
+  const ocrHintBox = $('ocrHintBox');
+  const switchToManualBtn = $('switchToManualBtn');
 
   // Buttons
   const previewBtn = $('previewBtn');
@@ -1442,6 +1550,7 @@ body {
     ocrProgress.classList.add('active');
     ocrProgressBar.style.width = '0%';
     ocrResult.value = '';
+    ocrHintBox.classList.remove('active');
 
     try {
       // Step 1: Load and preprocess image
@@ -1521,12 +1630,42 @@ body {
       ocrStatus.textContent = '認識完了（' + (levelLabel[level] || '自動') +
         ' / PSM=' + psmLabels[bestPsm] +
         ' / 信頼度' + Math.round(bestConfidence) + '%）';
+
+      // Show hint if confidence is low (likely handwritten)
+      if (bestConfidence < 60) {
+        ocrHintBox.classList.add('active');
+      } else {
+        ocrHintBox.classList.remove('active');
+      }
     } catch (err) {
       ocrStatus.textContent = 'エラー: ' + err.message;
       ocrProgressBar.style.width = '0%';
       console.error('OCR error:', err);
     }
   }
+
+  // ===== Switch to manual input with image reference =====
+  function switchToManualWithImage() {
+    if (currentImageData) {
+      imageRefImg.src = currentImageData;
+      imageRefPanel.classList.add('active');
+    }
+
+    // Switch tab
+    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-tab="manual"]').classList.add('active');
+    document.getElementById('tab-manual').classList.add('active');
+
+    // Focus the body textarea
+    docBody.focus();
+  }
+
+  switchToManualBtn.addEventListener('click', switchToManualWithImage);
+
+  imageRefClose.addEventListener('click', () => {
+    imageRefPanel.classList.remove('active');
+  });
 
   // Apply OCR result to body
   ocrApplyBtn.addEventListener('click', () => {
@@ -1540,6 +1679,12 @@ body {
       docBody.value += '\n\n' + text;
     } else {
       docBody.value = text;
+    }
+
+    // Show image reference when switching to manual tab
+    if (currentImageData) {
+      imageRefImg.src = currentImageData;
+      imageRefPanel.classList.add('active');
     }
 
     document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
